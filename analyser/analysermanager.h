@@ -14,6 +14,7 @@ class AnalyserManager : public QObject
 {
     Q_OBJECT
 public:
+    friend class MainWindow;
   /**
    * Scan all *.h,*.cpp,*.c,*.hpp files in startDir recursivly and return an svg with the output
    */

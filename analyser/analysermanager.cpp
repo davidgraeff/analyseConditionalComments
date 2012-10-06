@@ -15,8 +15,17 @@ AnalyserManager::AnalyserManager(QObject *parent)
   connect(&m_resultSVGFutureWatcher, SIGNAL(canceled()), SIGNAL(svgCanceled()));
   connect(&m_resultSVGFutureWatcher, SIGNAL(finished()), SLOT(generateSVGFinished()));
 
+  // Default values
   m_fileBackgroundColor = QColor(255,255,255,255); // transparent
   m_fileMarkDefaultColor = QColor(0,0,255,40);
+
+  setFileItemDimensionLimit(0, 300, 50);
+  setFileSizeCorrelatesRectangle(true);
+  setHideFiles(true, true);
+  setVerticalOutput(false);
+  setOutputWithLinebreak(true, 10);
+  setSortFiles(false);
+
   clear();
 }
 
@@ -46,6 +55,16 @@ void AnalyserManager::readINI(const QString& filename){
   
   QSettings s(filename, QSettings::IniFormat);
   s.setIniCodec("UTF-8");
+  setFileItemDimensionLimit(s.value(QLatin1String("min"), m_min).toInt(),
+                            s.value(QLatin1String("max"), m_max).toInt(),
+                            s.value(QLatin1String("width"), m_width).toInt());
+  setFileSizeCorrelatesRectangle(s.value(QLatin1String("FileSizeCorrelatesRectangle"), m_fileSizeCorrelatesRectangle).toBool());
+  setHideFiles(s.value(QLatin1String("HidenotRelatedConditionalComments"), m_HidenotRelatedConditionalComments).toBool(),
+               s.value(QLatin1String("HidenoConditionalComments"), m_HidenoConditionalComments).toBool());
+  setVerticalOutput(s.value(QLatin1String("VerticalOutput"), m_verticalOutput).toBool());
+  setOutputWithLinebreak(s.value(QLatin1String("linebreaks"), m_outputWithLinebreak).toBool(),
+                         s.value(QLatin1String("linebreaksFiles"), m_outputWithLinebreakCount).toInt());
+  setSortFiles(s.value(QLatin1String("SortFilesSize"), m_sortFilesSize).toBool());
 
   s.beginGroup(QLatin1String("files"));
   QStringList files = s.childGroups();
@@ -394,6 +413,16 @@ void AnalyserManager::generateINI(const QString& filename){
   QFile(filename).remove();
   QSettings s(filename, QSettings::IniFormat);
   s.setIniCodec("UTF-8");
+  s.setValue(QLatin1String("min"), m_min);
+  s.setValue(QLatin1String("max"), m_max);
+  s.setValue(QLatin1String("width"), m_width);
+  s.setValue(QLatin1String("FileSizeCorrelatesRectangle"), m_fileSizeCorrelatesRectangle);
+  s.setValue(QLatin1String("HidenotRelatedConditionalComments"), m_HidenotRelatedConditionalComments);
+  s.setValue(QLatin1String("HidenoConditionalComments"), m_HidenoConditionalComments);
+  s.setValue(QLatin1String("VerticalOutput"), m_verticalOutput);
+  s.setValue(QLatin1String("linebreaks"), m_outputWithLinebreak);
+  s.setValue(QLatin1String("linebreaksFiles"), m_outputWithLinebreakCount);
+  s.setValue(QLatin1String("SortFilesSize"), m_sortFilesSize);
 
   s.beginGroup(QLatin1String("files"));
   QList<FileResult*> stack;

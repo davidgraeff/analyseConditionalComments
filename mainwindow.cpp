@@ -17,6 +17,7 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->setupUi(this);
     QSettings s;
     ui->startdir->setText(s.value(QLatin1String("startdir")).toString());
+    ui->lineProjectFile->setText(s.value(QLatin1String("lastprojectfile")).toString());
     m_analysemanager = new AnalyserManager();
     ui->lineFileFIlter->setText(m_analysemanager->getFileFilter().join(QLatin1String(",")));
     ui->btnAnalyse->setText(trUtf8("Analysieren"));
@@ -81,6 +82,8 @@ void MainWindow::on_btnSearchINI_clicked()
     QString filename = QFileDialog::getOpenFileName(this, trUtf8("Wähle Analysedatei"), ui->lineProjectFile->text(), trUtf8("Analysedatei (*.fileAnalyse)"));
     m_analysemanager->readINI(filename);
     ui->lineProjectFile->setText(filename);
+    QSettings s;
+    s.setValue(QLatin1String("lastprojectfile"), filename);
 }
 
 void MainWindow::on_btnRefresh_clicked()
@@ -114,6 +117,7 @@ void MainWindow::svgGenerated() {
 
 void MainWindow::on_btnSwitchToOutput_clicked()
 {
+    // Read data from project
     QList<AnalyserManager::ifdefStruct> l = m_analysemanager->ifdefs();
     for (int i=0;i< l.size();++i) {
         QListWidgetItem* item = new QListWidgetItem(l[i].name);
@@ -128,6 +132,17 @@ void MainWindow::on_btnSwitchToOutput_clicked()
         setItemColor(item,files[i]->bgColor(), true);
         ui->listFiles->addItem(item);
     }
+    ui->chkHideFiles->setChecked(m_analysemanager->m_HidenotRelatedConditionalComments? Qt::Checked : Qt::Unchecked);
+    ui->chkHideFiles2->setChecked(m_analysemanager->m_HidenoConditionalComments? Qt::Checked : Qt::Unchecked);
+    ui->chkVertical->setChecked(m_analysemanager->m_verticalOutput? Qt::Checked : Qt::Unchecked);
+    ui->chkSortFilesSize->setChecked(m_analysemanager->m_sortFilesSize? Qt::Checked : Qt::Unchecked);
+    ui->chkVariableSize->setChecked(m_analysemanager->m_fileSizeCorrelatesRectangle? Qt::Checked : Qt::Unchecked);
+    ui->chkUmbruch->setChecked(m_analysemanager->m_outputWithLinebreak? Qt::Checked : Qt::Unchecked);
+    ui->spinUmbruch->setValue(m_analysemanager->m_outputWithLinebreakCount);
+    ui->spinMin->setValue(m_analysemanager->m_min);
+    ui->spinMax->setValue(m_analysemanager->m_max);
+    ui->spinWidth->setValue(m_analysemanager->m_width);
+
     on_btnRefresh_clicked();
     ui->stackedWidget->setCurrentIndex(1);
 }
