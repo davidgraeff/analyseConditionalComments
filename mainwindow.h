@@ -90,4 +90,5 @@ private:
 private Q_SLOTS:
     void progressValueChanged(int);
     void svgGenerated();
+    void on_chkSortFilesSize_clicked();
 };

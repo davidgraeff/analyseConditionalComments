@@ -99,6 +99,7 @@ void MainWindow::on_btnRefresh_clicked()
   m_analysemanager->setHideFiles(ui->chkHideFiles->isChecked(), ui->chkHideFiles2->isChecked());
   m_analysemanager->setFileSizeCorrelatesRectangle(ui->chkVariableSize->isChecked());
   m_analysemanager->setFileItemDimensionLimit(ui->spinMin->value(), ui->spinMax->value(), ui->spinWidth->value());
+  m_analysemanager->setSortFiles(ui->chkSortFilesSize->isChecked());
 
   m_analysemanager->generateSVGAsync();
   ui->btnRefresh->setEnabled(false);
@@ -120,10 +121,11 @@ void MainWindow::on_btnSwitchToOutput_clicked()
       setItemColor(item, l[i].color, false);
       ui->listConcerns->addItem(item);
     }
-    QStringList files = m_analysemanager->foundFiles();
+    QList<FileResult*> files = m_analysemanager->files();
     for (int i=0;i< files.size();++i) {
-        QListWidgetItem* item = new QListWidgetItem(files[i]);
-        item->setCheckState(Qt::Checked);
+        QListWidgetItem* item = new QListWidgetItem( QFileInfo(files[i]->getFilename()).fileName() );
+        item->setCheckState(files[i]->getEnabled()? Qt::Checked : Qt::Unchecked);
+        setItemColor(item,files[i]->bgColor(), true);
         ui->listFiles->addItem(item);
     }
     on_btnRefresh_clicked();
@@ -290,6 +292,11 @@ void MainWindow::on_spinWidth_valueChanged(int)
     ui->btnRefresh->setEnabled(true);
 }
 
+void MainWindow::on_chkSortFilesSize_clicked()
+{
+    ui->btnRefresh->setEnabled(true);
+}
+
 void MainWindow::setItemColor(QListWidgetItem*item, QColor color, bool isFileItem) {
     item->setBackgroundColor(color);
     if (color.lightness()<186*color.alphaF())
@@ -414,4 +421,3 @@ void MainWindow::on_btnChangeColorSelected_2_clicked()
         }
     }
 }
-

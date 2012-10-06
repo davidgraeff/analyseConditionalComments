@@ -26,7 +26,7 @@ public:
     void setFileFilter(const QStringList& filter);
     QStringList getFileFilter() const;
 
-    QStringList foundFiles() const;
+    QList<FileResult*> files() const;
     void setFileEnable(int v, bool enabled);
     void setHideFiles(bool notRelatedConditionalComments, bool noConditionalComments);
 
@@ -34,6 +34,7 @@ public:
     void setOutputWithLinebreak(bool b, int count);
 
     void setFileSizeCorrelatesRectangle(bool b);
+    void setSortFiles(bool b);
     void setFileBackgroundColor(const QString &filename, QColor c);
     QColor defaultFileBackgroundColor() const;
 
@@ -87,6 +88,7 @@ private:
     bool m_outputWithLinebreak;
     int m_outputWithLinebreakCount;
     bool m_fileSizeCorrelatesRectangle;
+    bool m_sortFilesSize;
     QColor m_fileBackgroundColor;
     QColor m_fileMarkDefaultColor;
     int m_min;
@@ -100,6 +102,7 @@ private:
     QFuture< QPair<QByteArray, QSize> > m_resultSVGFuture;
     QFutureWatcher< QPair<QByteArray, QSize> > m_resultSVGFutureWatcher;
     void postAnalyse();
+    static bool sortSize(const FileResult *r1, const FileResult *r2);
     QByteArray svgFileConcernRect(int x, int y, int barwidth, int barheight, FileResult *current, bool verticalOutput);
     QByteArray svgFilenameText(int x, int y, const QString& filename, bool verticalText);
 Q_SIGNALS:

@@ -105,12 +105,8 @@ QStringList AnalyserManager::getFileFilter() const {
     return m_filters;
 }
 
-QStringList AnalyserManager::foundFiles() const {
-    QStringList result;
-    for (int i=0;i<m_files.size();++i) {
-        result.append(QFileInfo(m_files[i]->getFilename()).fileName());
-    }
-    return result;
+QList<FileResult*> AnalyserManager::files() const {
+    return m_files;
 }
 
 void AnalyserManager::setFileEnable(int v, bool enabled) {
@@ -133,6 +129,10 @@ void AnalyserManager::setOutputWithLinebreak(bool b, int count) {
 
 void AnalyserManager::setFileSizeCorrelatesRectangle(bool b) {
     m_fileSizeCorrelatesRectangle = b;
+}
+
+void AnalyserManager::setSortFiles(bool b) {
+    m_sortFilesSize=b;
 }
 
 void AnalyserManager::setFileBackgroundColor(const QString& filename, QColor c) {
@@ -248,6 +248,10 @@ QByteArray AnalyserManager::svgFilenameText(int x, int y, const QString& filenam
                 "\" style=\"font-size:30;\" fill=\"black\">"+filename.toUtf8()+"</text>\n";
 }
 
+bool AnalyserManager::sortSize(const FileResult* r1, const FileResult* r2) {
+    return r1->getLines() < r2->getLines();
+}
+
 QPair<QByteArray, QSize> AnalyserManager::generateSVG()
 {
     QFont f;
@@ -255,6 +259,9 @@ QPair<QByteArray, QSize> AnalyserManager::generateSVG()
     QFontMetrics fm = QFontMetrics(f);
   QList<FileResult*> stack;
   stack.append(m_files);
+  if (m_sortFilesSize) {
+      qSort(stack.begin(), stack.end(), AnalyserManager::sortSize);
+  }
   
   const int maxbarlength = m_max;
   const int barwidth = m_width;
