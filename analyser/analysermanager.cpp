@@ -6,12 +6,14 @@
 #include <QtCore>
 #include <QFontMetrics>
 
-AnalyserManager::AnalyserManager(QObject *parent) :
-    QFutureWatcher< FileResult* >(parent)
+AnalyserManager::AnalyserManager(QObject *parent)
 {
   m_filters << QLatin1String("*.cpp") << QLatin1String("*.h") << QLatin1String("*.c") << QLatin1String("*.hpp");
-    connect(this, SIGNAL(finished()), SLOT(allFilesAnalysed()));
-  connect(this, SIGNAL(canceled()), SLOT(allFilesAnalysed()));
+  connect(&m_fileresultFuture, SIGNAL(canceled()), SLOT(analyseCanceled()));
+  connect(&m_fileresultFuture, SIGNAL(finished()), SLOT(allFilesAnalysed()));
+  connect(&m_fileresultFuture, SIGNAL(progressValueChanged(int)), SIGNAL(progressValueChanged(int)));
+  connect(&m_resultSVGFutureWatcher, SIGNAL(canceled()), SIGNAL(svgCanceled()));
+  connect(&m_resultSVGFutureWatcher, SIGNAL(finished()), SLOT(generateSVGFinished()));
 
   m_fileBackgroundColor = QColor(255,255,255,255); // transparent
   m_fileMarkDefaultColor = QColor(0,0,255,40);
@@ -28,8 +30,12 @@ QColor AnalyserManager::fileMarkDefaultColor() const {
     return m_fileMarkDefaultColor;
 }
 
-void AnalyserManager::cancel() {
+void AnalyserManager::cancelAnalysingFiles() {
   m_results.cancel();
+}
+
+bool AnalyserManager::isAnalysingFiles() {
+  return m_results.isRunning();
 }
 
 void AnalyserManager::readINI(const QString& filename){
@@ -40,7 +46,6 @@ void AnalyserManager::readINI(const QString& filename){
   
   QSettings s(filename, QSettings::IniFormat);
   s.setIniCodec("UTF-8");
-  m_fileBackgroundColor = s.value(QLatin1String("bgcolor"), m_fileBackgroundColor).value<QColor>();
 
   s.beginGroup(QLatin1String("files"));
   QStringList files = s.childGroups();
@@ -50,6 +55,7 @@ void AnalyserManager::readINI(const QString& filename){
     FileResult* fr = new FileResult(s.value(QLatin1String("filename")).toString());
     fr->setEnabled(s.value(QLatin1String("enabled")).toBool());
     fr->setLines(s.value(QLatin1String("lines")).toInt());
+    fr->setBgColor(s.value(QLatin1String("bgcolor"), m_fileBackgroundColor).value<QColor>());
     const int len = s.beginReadArray(QLatin1String("concerns"));
     for (int i=0;i<len;++i) {
       s.setArrayIndex(i);
@@ -111,8 +117,9 @@ void AnalyserManager::setFileEnable(int v, bool enabled) {
     m_files[v]->setEnabled(enabled);
 }
 
-void AnalyserManager::setHideNotRelatedFiles(bool b) {
-    m_hideNotRelatedFiles = b;
+void AnalyserManager::setHideFiles(bool notRelatedConditionalComments, bool noConditionalComments) {
+    m_HidenotRelatedConditionalComments = notRelatedConditionalComments;
+    m_HidenoConditionalComments = noConditionalComments;
 }
 
 void AnalyserManager::setVerticalOutput(bool b) {
@@ -128,11 +135,16 @@ void AnalyserManager::setFileSizeCorrelatesRectangle(bool b) {
     m_fileSizeCorrelatesRectangle = b;
 }
 
-void AnalyserManager::setFileBackgroundColor(QColor c) {
-    m_fileBackgroundColor = c;
+void AnalyserManager::setFileBackgroundColor(const QString& filename, QColor c) {
+    for (int i=0;i< m_files.size();++i) {
+        if (QFileInfo(m_files[i]->getFilename()).fileName()==filename) {
+            m_files[i]->setBgColor(c);
+            break;
+        }
+    }
 }
 
-QColor AnalyserManager::fileBackgroundColor() const {
+QColor AnalyserManager::defaultFileBackgroundColor() const {
     return m_fileBackgroundColor;
 }
 
@@ -142,7 +154,7 @@ void AnalyserManager::setFileItemDimensionLimit(int min, int max, int width) {
     m_width = width;
 }
 
-void AnalyserManager::start(){
+void AnalyserManager::startAnalysingFiles(){
   clear();
   
   QStringList dirstack;
@@ -166,11 +178,11 @@ void AnalyserManager::start(){
     dirstack.append(dirs);
   }
   m_results = QtConcurrent::mapped(allfiles, CFileAnalyser::analyseFile);
-  setFuture(m_results);
+  m_fileresultFuture.setFuture(m_results);
 }
 
 void AnalyserManager::clear(){
-  if (isRunning())
+  if (m_results.isRunning())
     return;
   
   qDeleteAll(m_files);
@@ -183,10 +195,11 @@ void AnalyserManager::clear(){
 QByteArray AnalyserManager::svgFileConcernRect(int x, int y, int barwidth, int barheight, FileResult* current, bool verticalOutput) {
     QByteArray t;
 
+    QColor bgc = current->bgColor();
     t += "<rect x=\""+QByteArray::number(x)+"\" y=\""+QByteArray::number(y)+
             "\" width=\""+QByteArray::number(barwidth)+"\" height=\""+QByteArray::number(barheight)+
-            "\" style=\"fill:rgb("+QByteArray::number(m_fileBackgroundColor.red())+","+
-            QByteArray::number(m_fileBackgroundColor.green())+","+QByteArray::number(m_fileBackgroundColor.blue())+");"+
+            "\" style=\"fill:rgb("+QByteArray::number(bgc.red())+","+
+            QByteArray::number(bgc.green())+","+QByteArray::number(bgc.blue())+");"+
             "fill-opacity:"+QByteArray::number(m_fileBackgroundColor.alphaF())+
             ";stroke-width:1;stroke:rgb(0,0,0)\" />\n";
 
@@ -235,7 +248,7 @@ QByteArray AnalyserManager::svgFilenameText(int x, int y, const QString& filenam
                 "\" style=\"font-size:30;\" fill=\"black\">"+filename.toUtf8()+"</text>\n";
 }
 
-QByteArray AnalyserManager::generateSVG()
+QPair<QByteArray, QSize> AnalyserManager::generateSVG()
 {
     QFont f;
     f.setPointSize(20);
@@ -264,13 +277,23 @@ QByteArray AnalyserManager::generateSVG()
     if (!current->getEnabled())
         continue;
     // any active concern in it?
-    if (m_hideNotRelatedFiles) {
+    if (m_HidenoConditionalComments && current->foundConcerns().isEmpty()) {
+        continue;
+    }
+    if (m_HidenotRelatedConditionalComments) {
+        bool skip = true;
         for (int i=0,len=current->foundConcerns().size();i<len;++i) {
             Concern c = current->foundConcerns()[i];
             QMap<QString, ifdefStruct>::iterator it= m_ifdefs.find(c.name);
             if (it==m_ifdefs.end() || !it->enabled)
-              continue;
+                continue;
+
+            // We found at least one concern in this file that is enabled
+            skip = false;
+            break;
         }
+        if (skip)
+            continue;
     }
 
     const QString filename = QFileInfo(current->getFilename()).fileName();
@@ -325,13 +348,38 @@ QByteArray AnalyserManager::generateSVG()
   const QByteArray header = "<svg xmlns=\"http://www.w3.org/2000/svg\" version=\"1.1\">\n";
   const QByteArray footer = "</svg>";
 
-  return header + svgmain + footer;
+  return QPair<QByteArray, QSize>(header + svgmain + footer, QSize(maxwidth, maxheight));
+}
+
+QByteArray AnalyserManager::getSVG() {
+    return m_resultSVG;
+}
+
+QSize AnalyserManager::getSVGDimension() {
+    return m_resultSVGDimension;
+}
+
+QPair<QByteArray, QSize> _helpergenerateSVGAsync(AnalyserManager* am) {
+    return am->generateSVG();
+}
+
+void AnalyserManager::generateSVGAsync() {
+    m_resultSVGFuture = QtConcurrent::run(_helpergenerateSVGAsync, this);
+    m_resultSVGFutureWatcher.setFuture(m_resultSVGFuture);
+}
+
+void AnalyserManager::generateSVGFinished() {
+    QPair<QByteArray, QSize> result = m_resultSVGFuture.result();
+    m_resultSVG = result.first;
+    m_resultSVGDimension = result.second;
+    m_resultSVGFuture = QFuture< QPair<QByteArray, QSize> >();
+    Q_EMIT svgGenerated();
 }
 
 void AnalyserManager::generateSVG(const QString& filename){
   QFile f(filename);
   f.open(QFile::WriteOnly|QFile::Truncate);
-  f.write(generateSVG());
+  f.write(m_resultSVG);
   f.close();
 }
 
@@ -339,7 +387,6 @@ void AnalyserManager::generateINI(const QString& filename){
   QFile(filename).remove();
   QSettings s(filename, QSettings::IniFormat);
   s.setIniCodec("UTF-8");
-  s.setValue(QLatin1String("bgcolor"), m_fileBackgroundColor);
 
   s.beginGroup(QLatin1String("files"));
   QList<FileResult*> stack;
@@ -351,6 +398,7 @@ void AnalyserManager::generateINI(const QString& filename){
     s.beginGroup(current->getFilename().replace(QLatin1String("/"), QLatin1String("_")));
     s.setValue(QLatin1String("filename"), current->getFilename());
     s.setValue(QLatin1String("enabled"), current->getEnabled());
+    s.setValue(QLatin1String("bgcolor"), current->bgColor());
     s.setValue(QLatin1String("lines"), current->getLines());
     s.beginWriteArray(QLatin1String("concerns"));
     for (int i=0,len=current->foundConcerns().size();i<len;++i) {
@@ -408,16 +456,15 @@ void AnalyserManager::postAnalyse() {
     }
 }
 
-void AnalyserManager::allFilesAnalysed() {
-  if (isCanceled()) {
+void AnalyserManager::analyseCanceled() {
     Q_EMIT finishedCompletly(true);
-    return;
-  }
-  
+}
+
+void AnalyserManager::allFilesAnalysed() {
   for(QFuture<FileResult*>::const_iterator i = m_results.begin();i!=m_results.end();++i) {
       FileResult* r = *i;
-    m_files.append(r);
-
+        m_files.append(r);
+       r->setBgColor(m_fileBackgroundColor);
   }
   QSet<QString> concern_names;
   for(QList<FileResult*>::const_iterator i = m_files.begin();i!=m_files.end();++i) {

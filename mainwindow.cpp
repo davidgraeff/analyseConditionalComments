@@ -22,9 +22,10 @@ MainWindow::MainWindow(QWidget *parent) :
     ui->btnAnalyse->setText(trUtf8("Analysieren"));
     connect(m_analysemanager, SIGNAL(progressValueChanged(int)), SLOT(progressValueChanged(int)));
     connect(m_analysemanager, SIGNAL(finishedCompletly(bool)), SLOT(finished(bool)));
+    connect(m_analysemanager, SIGNAL(svgGenerated()), SLOT(svgGenerated()));
 
-    ui->listConcerns->setContextMenuPolicy(Qt::ActionsContextMenu);
-    ui->listConcerns->addAction(ui->actionActionIFDEF);
+    ui->webView->page()->mainFrame()->setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOn);
+    ui->webView->page()->mainFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOn);
 
     ui->stackedWidget->setCurrentIndex(0);
 #ifndef WITHPDF
@@ -53,14 +54,14 @@ void MainWindow::on_btnSearch_clicked()
 void MainWindow::on_btnAnalyse_clicked()
 {
     ui->btnRefresh->setEnabled(false);
-    if (m_analysemanager->isRunning()) {
-      m_analysemanager->cancel();
+    if (m_analysemanager->isAnalysingFiles()) {
+      m_analysemanager->cancelAnalysingFiles();
     } else {
       QSettings s;
       s.setValue(QLatin1String("startdir"), ui->startdir->text());
       m_analysemanager->setStartDirectory(QDir(ui->startdir->text()), ui->chkRecursiv->isChecked());
       m_analysemanager->setFileFilter(ui->lineFileFIlter->text().replace(QLatin1String(" "),QString()).split(QLatin1String(",")));
-      m_analysemanager->start();
+      m_analysemanager->startAnalysingFiles();
       ui->btnAnalyse->setText(trUtf8("Abbrechen"));
     }
 }
@@ -84,6 +85,7 @@ void MainWindow::on_btnSearchINI_clicked()
 
 void MainWindow::on_btnRefresh_clicked()
 {
+  // Synchronise gui with analyseManager
   QStringList l;
   for(int i=0,len=ui->listConcerns->count();i<len;++i) {
       m_analysemanager->setIFDEFEnabled(ui->listConcerns->item(i)->text(), (ui->listConcerns->item(i)->checkState()==Qt::Checked));
@@ -94,65 +96,20 @@ void MainWindow::on_btnRefresh_clicked()
 
   m_analysemanager->setVerticalOutput(ui->chkVertical->isChecked());
   m_analysemanager->setOutputWithLinebreak(ui->chkUmbruch->isChecked(), ui->spinUmbruch->value());
-  m_analysemanager->setHideNotRelatedFiles(ui->chkHideFiles->isChecked());
-  m_analysemanager->setFileSizeCorrelatesRectangle(ui->chkVariableSize);
+  m_analysemanager->setHideFiles(ui->chkHideFiles->isChecked(), ui->chkHideFiles2->isChecked());
+  m_analysemanager->setFileSizeCorrelatesRectangle(ui->chkVariableSize->isChecked());
   m_analysemanager->setFileItemDimensionLimit(ui->spinMin->value(), ui->spinMax->value(), ui->spinWidth->value());
 
-  ui->webView->setContent(m_analysemanager->generateSVG(), QLatin1String("image/svg+xml"));
-  ui->webView->page()->mainFrame()->setScrollBarPolicy(Qt::Vertical, Qt::ScrollBarAlwaysOn);
-  ui->webView->page()->mainFrame()->setScrollBarPolicy(Qt::Horizontal, Qt::ScrollBarAlwaysOn);
+  m_analysemanager->generateSVGAsync();
   ui->btnRefresh->setEnabled(false);
 }
 
-void MainWindow::on_btnToggle_clicked()
-{
-  for(int i=0,len=ui->listConcerns->count();i<len;++i) {
-    ui->listConcerns->item(i)->setCheckState( ui->listConcerns->item(i)->checkState()==Qt::Checked?Qt::Unchecked:Qt::Checked);
-  }
+void MainWindow::svgGenerated() {
+    ui->webView->setContent("<!DOCTYPE HTML>\n<html><body style='width:"+QByteArray::number(m_analysemanager->getSVGDimension().width())+
+                            "px;height:"+QByteArray::number(m_analysemanager->getSVGDimension().height())+"px'>"+
+                            m_analysemanager->getSVG() + "</body></html>", QLatin1String("text/html"));
 }
 
-void MainWindow::on_btnAll_clicked()
-{
-  for(int i=0,len=ui->listConcerns->count();i<len;++i) {
-    ui->listConcerns->item(i)->setCheckState(Qt::Checked);
-  }
-}
-
-void MainWindow::on_btnFilter_clicked()
-{
-    QString text = QInputDialog::getText(this, tr("Filterbegriff"), tr("Es werden alle Elemente in der Liste ausgewählt, welche den angegeben Text enhalten."));
-    if (text.isEmpty())
-        return;
-    for(int i=0,len=ui->listConcerns->count();i<len;++i) {
-        if (ui->listConcerns->item(i)->text().contains(text))
-            ui->listConcerns->item(i)->setCheckState(Qt::Checked);
-    }
-}
-
-void MainWindow::on_btnToggle_2_clicked()
-{
-  for(int i=0,len=ui->listFiles->count();i<len;++i) {
-    ui->listFiles->item(i)->setCheckState( ui->listFiles->item(i)->checkState()==Qt::Checked?Qt::Unchecked:Qt::Checked);
-  }
-}
-
-void MainWindow::on_btnAll_2_clicked()
-{
-  for(int i=0,len=ui->listFiles->count();i<len;++i) {
-    ui->listFiles->item(i)->setCheckState(Qt::Checked);
-  }
-}
-
-void MainWindow::on_btnFilter_2_clicked()
-{
-    QString text = QInputDialog::getText(this, tr("Filterbegriff"), tr("Es werden alle Elemente in der Liste ausgewählt, welche den angegeben Text enhalten."));
-    if (text.isEmpty())
-        return;
-    for(int i=0,len=ui->listFiles->count();i<len;++i) {
-        if (ui->listFiles->item(i)->text().contains(text))
-            ui->listFiles->item(i)->setCheckState(Qt::Checked);
-    }
-}
 
 void MainWindow::on_btnSwitchToOutput_clicked()
 {
@@ -160,7 +117,7 @@ void MainWindow::on_btnSwitchToOutput_clicked()
     for (int i=0;i< l.size();++i) {
         QListWidgetItem* item = new QListWidgetItem(l[i].name);
       item->setCheckState(l[i].enabled? Qt::Checked : Qt::Unchecked);
-      setItemColor(item, l[i].color);
+      setItemColor(item, l[i].color, false);
       ui->listConcerns->addItem(item);
     }
     QStringList files = m_analysemanager->foundFiles();
@@ -259,7 +216,7 @@ void MainWindow::on_btnOutputPDF_clicked()
     if (QFileInfo(filename).suffix().toLower()!=QLatin1String("pdf"))
       filename += QLatin1String(".pdf");
     s.setValue(QLatin1String("pdffilename"), filename);
-    const QByteArray svgdata = m_analysemanager->generateSVG();
+    const QByteArray svgdata = m_analysemanager->getSVG();
     const QByteArray output_filename_bytearray = filename.toUtf8();
     saveWithCairo(false, (const unsigned char*)svgdata.constData(), svgdata.length(), output_filename_bytearray.data());
 }
@@ -272,7 +229,7 @@ void MainWindow::on_btnOutputPNG_clicked()
     if (QFileInfo(filename).suffix().toLower()!=QLatin1String("pdf"))
       filename += QLatin1String(".pdf");
     s.setValue(QLatin1String("pdffilename"), filename);
-    const QByteArray svgdata = m_analysemanager->generateSVG();
+    const QByteArray svgdata = m_analysemanager->getSVG();
     const QByteArray output_filename_bytearray = filename.toUtf8();
     saveWithCairo(false, (const unsigned char*)svgdata.constData(), svgdata.length(), output_filename_bytearray.data());
 }
@@ -308,6 +265,11 @@ void MainWindow::on_chkHideFiles_stateChanged(int)
     ui->btnRefresh->setEnabled(true);
 }
 
+void MainWindow::on_chkHideFiles2_stateChanged(int)
+{
+    ui->btnRefresh->setEnabled(true);
+}
+
 void MainWindow::on_spinUmbruch_valueChanged(int)
 {
     ui->btnRefresh->setEnabled(true);
@@ -328,50 +290,128 @@ void MainWindow::on_spinWidth_valueChanged(int)
     ui->btnRefresh->setEnabled(true);
 }
 
-void MainWindow::on_btnSelectBgColor_clicked()
-{
-    QColorDialog d;
-    d.setCurrentColor(m_analysemanager->fileBackgroundColor());
-    d.setOption(QColorDialog::ShowAlphaChannel, true);
-    if (d.exec() ==QDialog::Accepted) {
-        ui->btnRefresh->setEnabled(true);
-        m_analysemanager->setFileBackgroundColor(d.currentColor());
-    }
-}
-
-void MainWindow::setItemColor(QListWidgetItem*item, QColor color) {
+void MainWindow::setItemColor(QListWidgetItem*item, QColor color, bool isFileItem) {
     item->setBackgroundColor(color);
     if (color.lightness()<186*color.alphaF())
         item->setForeground(QColor(255,255,255));
     else
         item->setForeground(QColor(0,0,0));
-    m_analysemanager->setIFDEFColor(item->text(), color);
+    if (isFileItem)
+        m_analysemanager->setFileBackgroundColor(item->text(), color);
+    else
+        m_analysemanager->setIFDEFColor(item->text(), color);
 }
 
-void MainWindow::on_actionActionIFDEF_triggered()
+void MainWindow::on_btnToggle_clicked()
 {
-    QListWidgetItem* temp = ui->listConcerns->currentItem(); //ui->listConcerns->itemAt(ui->listConcerns->mapFromGlobal(QCursor::pos()));
-    if(temp == NULL)
+  for(int i=0,len=ui->listConcerns->count();i<len;++i) {
+      ui->listConcerns->item(i)->setSelected(!ui->listConcerns->item(i)->isSelected());
+  }
+}
+
+void MainWindow::on_btnAll_clicked()
+{
+  for(int i=0,len=ui->listConcerns->count();i<len;++i) {
+     ui->listConcerns->item(i)->setSelected(true);
+  }
+}
+
+void MainWindow::on_btnFilter_clicked()
+{
+    QString text = QInputDialog::getText(this, tr("Filterbegriff"), tr("Es werden alle Elemente in der Liste ausgewählt, welche den angegeben Text enhalten."));
+    if (text.isEmpty())
         return;
-    QColorDialog d;
-    d.setWindowTitle(trUtf8("Farbe wählen für ")+temp->text());
-    d.setCurrentColor(m_analysemanager->IFDEFColor(temp->text()));
-    d.setOption(QColorDialog::ShowAlphaChannel, true);
-    if (d.exec() ==QDialog::Accepted) {
-        setItemColor(temp, d.currentColor());
+    for(int i=0,len=ui->listConcerns->count();i<len;++i) {
+        if (ui->listConcerns->item(i)->text().contains(text))
+            ui->listConcerns->item(i)->setSelected(true);
     }
 }
 
-void MainWindow::on_btnSelectFgColor_clicked()
+void MainWindow::on_btnToggle_2_clicked()
 {
+  for(int i=0,len=ui->listFiles->count();i<len;++i) {
+    ui->listFiles->item(i)->setSelected(!ui->listFiles->item(i)->isSelected());
+  }
+}
+
+void MainWindow::on_btnAll_2_clicked()
+{
+  for(int i=0,len=ui->listFiles->count();i<len;++i) {
+    ui->listFiles->item(i)->setSelected(true);
+  }
+}
+
+void MainWindow::on_btnFilter_2_clicked()
+{
+    QString text = QInputDialog::getText(this, tr("Filterbegriff"), tr("Es werden alle Elemente in der Liste ausgewählt, welche den angegeben Text enhalten."));
+    if (text.isEmpty())
+        return;
+    for(int i=0,len=ui->listFiles->count();i<len;++i) {
+        if (ui->listFiles->item(i)->text().contains(text))
+            ui->listFiles->item(i)->setSelected(true);
+    }
+}
+
+void MainWindow::on_btnEnableSelected_clicked()
+{
+    QList<QListWidgetItem*> items = ui->listConcerns->selectedItems();
+    for (int i=0;i<items.size();++i) {
+        items[i]->setCheckState(Qt::Checked);
+    }
+}
+
+void MainWindow::on_btndisableSelected_clicked()
+{
+    QList<QListWidgetItem*> items = ui->listConcerns->selectedItems();
+    for (int i=0;i<items.size();++i) {
+        items[i]->setCheckState(Qt::Unchecked);
+    }
+}
+
+void MainWindow::on_btnChangeColorSelected_clicked()
+{
+    QList<QListWidgetItem*> items = ui->listConcerns->selectedItems();
+    if(items.isEmpty())
+        return;
     QColorDialog d;
+    d.setWindowTitle(trUtf8("Farbe wählen für %1 Einträge").arg(items.size()));
     d.setCurrentColor(m_analysemanager->fileMarkDefaultColor());
     d.setOption(QColorDialog::ShowAlphaChannel, true);
     if (d.exec() ==QDialog::Accepted) {
-        ui->btnRefresh->setEnabled(true);
-        for (int i=0;i< ui->listConcerns->count();++i) {
-            QListWidgetItem* item = ui->listConcerns->item(i);
-            setItemColor(item, d.currentColor());
+        QList<QListWidgetItem*> items = ui->listConcerns->selectedItems();
+        for (int i=0;i<items.size();++i) {
+            setItemColor(items[i], d.currentColor(), false);
         }
     }
 }
+
+void MainWindow::on_btnEnableSelected_2_clicked()
+{
+    QList<QListWidgetItem*> items = ui->listFiles->selectedItems();
+    for (int i=0;i<items.size();++i) {
+        items[i]->setCheckState(Qt::Checked);
+    }
+}
+
+void MainWindow::on_btndisableSelected_2_clicked()
+{
+    QList<QListWidgetItem*> items = ui->listFiles->selectedItems();
+    for (int i=0;i<items.size();++i) {
+        items[i]->setCheckState(Qt::Unchecked);
+    }
+}
+
+void MainWindow::on_btnChangeColorSelected_2_clicked()
+{
+    QColorDialog d;
+    d.setCurrentColor(m_analysemanager->defaultFileBackgroundColor());
+    d.setOption(QColorDialog::ShowAlphaChannel, true);
+    if (d.exec() ==QDialog::Accepted) {
+        ui->btnRefresh->setEnabled(true);
+        QList<QListWidgetItem*> items = ui->listFiles->selectedItems();
+        for (int i=0;i<items.size();++i) {
+            setItemColor(items[i], d.currentColor(), true);
+        }
+    }
+}
+

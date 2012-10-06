@@ -6,10 +6,11 @@
 #include <qthread.h>
 #include <qfuturewatcher.h>
 #include <QColor>
+#include <QSize>
 
 #include "analyser/fileresult.h"
 
-class AnalyserManager : public QFutureWatcher<FileResult*>
+class AnalyserManager : public QObject
 {
     Q_OBJECT
 public:
@@ -27,14 +28,14 @@ public:
 
     QStringList foundFiles() const;
     void setFileEnable(int v, bool enabled);
-    void setHideNotRelatedFiles(bool b);
+    void setHideFiles(bool notRelatedConditionalComments, bool noConditionalComments);
 
     void setVerticalOutput(bool b);
     void setOutputWithLinebreak(bool b, int count);
 
     void setFileSizeCorrelatesRectangle(bool b);
-    void setFileBackgroundColor(QColor c);
-    QColor fileBackgroundColor() const;
+    void setFileBackgroundColor(const QString &filename, QColor c);
+    QColor defaultFileBackgroundColor() const;
 
     struct ifdefStruct {
         bool enabled;
@@ -56,25 +57,32 @@ public:
     /**
      * Abort analysing but collected results remain
      */
-    void cancel();
-    
-    void start();
+    void cancelAnalysingFiles();
+    bool isAnalysingFiles();
+    void startAnalysingFiles();
     
     
     /**
      * Available after start()
      * Output
      */
-    void generateSVG(const QString& filename);
-    QByteArray generateSVG();
     void generateINI(const QString& filename);
-
+    void generateSVG(const QString& filename);
+    /// Get cached svg
+    QByteArray getSVG();
+    QSize getSVGDimension();
+    /// Synchronous call to generate the svg
+    QPair<QByteArray,QSize> generateSVG();
+    /// Asynchronous call to generate the svg -> listen for signal svgGenerated()
+    void generateSVGAsync();
 private:
+    QFutureWatcher<FileResult*> m_fileresultFuture;
     QFuture<FileResult*> m_results;
     QList<FileResult*> m_files;
     QDir m_startdir;
     bool m_recursivly;
-    bool m_hideNotRelatedFiles;
+    bool m_HidenotRelatedConditionalComments;
+    bool m_HidenoConditionalComments;
     bool m_verticalOutput;
     bool m_outputWithLinebreak;
     int m_outputWithLinebreakCount;
@@ -87,11 +95,20 @@ private:
     QMap<QString, ifdefStruct> m_ifdefs;
     QStringList m_filters;
     bool m_cancel;
+    QByteArray m_resultSVG;
+    QSize m_resultSVGDimension;
+    QFuture< QPair<QByteArray, QSize> > m_resultSVGFuture;
+    QFutureWatcher< QPair<QByteArray, QSize> > m_resultSVGFutureWatcher;
     void postAnalyse();
     QByteArray svgFileConcernRect(int x, int y, int barwidth, int barheight, FileResult *current, bool verticalOutput);
     QByteArray svgFilenameText(int x, int y, const QString& filename, bool verticalText);
 Q_SIGNALS:
     void finishedCompletly(bool aborted = false);
-public Q_SLOTS:
+    void svgGenerated();
+    void svgCanceled();
+    void progressValueChanged(int);
+private Q_SLOTS:
     void allFilesAnalysed();
+    void analyseCanceled();
+    void generateSVGFinished();
 };

@@ -2,6 +2,7 @@
 #include <qlist.h>
 #include <QSet>
 #include <qstringlist.h>
+#include <QColor>
 
 class Concern
 {
@@ -27,10 +28,13 @@ public:
     bool getEnabled() { return m_enabled; }
     void setNormalizedSize(float f) { m_normalizedSize = f; }
     float normalizedSize() { return m_normalizedSize; }
+    QColor bgColor() { return m_bgColor; }
+    void setBgColor(QColor c) { m_bgColor = c;}
 private:
     QList<Concern> m_concerns;
     QString m_filename;
     int m_maxlines;
     bool m_enabled;
     float m_normalizedSize;
+    QColor m_bgColor;
 };

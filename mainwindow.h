@@ -51,8 +51,6 @@ private Q_SLOTS:
 
     void on_btnOutputPNG_clicked();
 
-    void on_actionActionIFDEF_triggered();
-
     void on_listFiles_itemChanged(QListWidgetItem *item);
 
     void on_chkVertical_stateChanged(int arg1);
@@ -71,16 +69,25 @@ private Q_SLOTS:
 
     void on_spinWidth_valueChanged(int arg1);
 
-    void on_btnSelectBgColor_clicked();
+    void on_btnEnableSelected_clicked();
 
+    void on_btndisableSelected_clicked();
 
-    void on_btnSelectFgColor_clicked();
+    void on_btnChangeColorSelected_clicked();
+
+    void on_btnEnableSelected_2_clicked();
+
+    void on_btndisableSelected_2_clicked();
+
+    void on_btnChangeColorSelected_2_clicked();
+
+    void on_chkHideFiles2_stateChanged(int arg1);
 
 private:
     Ui::MainWindow *ui;
     AnalyserManager* m_analysemanager;
-    void setItemColor(QListWidgetItem*item, QColor color);
-
-public Q_SLOTS:
+    void setItemColor(QListWidgetItem*item, QColor color, bool isFileItem);
+private Q_SLOTS:
     void progressValueChanged(int);
+    void svgGenerated();
 };
