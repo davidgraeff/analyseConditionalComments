@@ -7,8 +7,7 @@ mostly no available documentation for all the used C-Macros and conditional comm
 Introducing a new feature may cause another conditional comment all over the codebase.
 
 This software will give you a quantitative graphical overview of all used conditional comments,
-their spreading and a first understanding of how much code is affected by each one of the
-#if/#ifdef uses.
+their spreading and a first understanding of how much code is affected by each one of the #if/#ifdef uses.
 The input is your codebase. Options for an output are vector based image types like svg and pdf,
 but also the raster based image type png.
 
