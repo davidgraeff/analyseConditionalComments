@@ -32,6 +32,13 @@ task. Nested conditional comments are supported, #ifdef-guards are recogniced an
 The parser is multi-thread capable and depending on your cpu cores even a large code base is
 analysed very fast.
 
+Screenshots:
+============
+![Preview screen, select #ifdefs and colors](http://davidgraeff.github.com/analyseConditionalComments/images/tool-screen-result.png)
+![Select files](http://davidgraeff.github.com/analyseConditionalComments/images/tool-screen-select.png)
+![Result of an lwIP analyses](http://davidgraeff.github.com/analyseConditionalComments/images/tool-result1.png)
+![Result of an Contiki/network (IPv6) analyses](http://davidgraeff.github.com/analyseConditionalComments/images/tool-result2.png)
+
 License:
 ========
 Not decided yet. Probably dual-licensed as GPLv3 and Apache License, Version 2.0.
