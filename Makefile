@@ -23,5 +23,7 @@ mrproper:
 	@if [ ! -e ${BUILD_DIRECTORY} ]; then make configure BUILD_DIRECTORY=${BUILD_DIRECTORY}; fi
 	+@cd ${BUILD_DIRECTORY}; $(BUILDCMD) $@
 
-
+run:
+	${BUILD_DIRECTORY}/analyseCSourceFiles
+	
 .PHONY: configure mrproper
